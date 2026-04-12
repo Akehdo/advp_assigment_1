@@ -15,6 +15,6 @@ FROM debian:bookworm-slim
 WORKDIR /root/
 COPY --from=builder /app/doctor-service .
 
-EXPOSE 8081
+EXPOSE 50051
 
 CMD ["./doctor-service"]

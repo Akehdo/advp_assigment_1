@@ -7,7 +7,7 @@ import (
 	"github.com/Akendo/assigment1/appointment/internal/repository"
 )
 
-var ErrDoctorServiceUnavailable = errors.New("doctor service gateway is required")
+var ErrDoctorServiceUnavailable = errors.New("doctor service is unavailable")
 var ErrDoctorNotFound = errors.New("doctor not found")
 
 type DoctorGateway interface {

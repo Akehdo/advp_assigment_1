@@ -3,13 +3,15 @@ package app
 import (
 	"database/sql"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/Akendo/assigment1/doctor/internal/repository/postgres"
-	transporthttp "github.com/Akendo/assigment1/doctor/internal/transport/http"
+	transportgrpc "github.com/Akendo/assigment1/doctor/internal/transport/grpc"
 	"github.com/Akendo/assigment1/doctor/internal/usecase"
-	"github.com/gin-gonic/gin"
+	doctorpb "github.com/Akendo/assigment1/doctor/proto"
 	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
 )
 
 func Run() error {
@@ -31,12 +33,18 @@ func Run() error {
 
 	repo := postgres.NewDoctorRepository(db)
 	service := usecase.NewDoctorService(repo)
-	handler := transporthttp.NewHandler(service)
+	handler := transportgrpc.NewHandler(service)
 
-	router := gin.Default()
-	handler.RegisterRoutes(router)
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		return err
+	}
 
-	return router.Run(":8081")
+	grpcServer := grpc.NewServer()
+	doctorpb.RegisterDoctorServiceServer(grpcServer, handler)
+
+	return grpcServer.Serve(lis)
+
 }
 
 func openDB(host, port, name, user, password string) (*sql.DB, error) {

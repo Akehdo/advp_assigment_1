@@ -3,14 +3,18 @@ package app
 import (
 	"database/sql"
 	"fmt"
+	"net"
 	"os"
 
-	"github.com/Akendo/assigment1/appointment/internal/gateway"
+	"github.com/Akendo/assigment1/appointment/internal/client"
 	"github.com/Akendo/assigment1/appointment/internal/repository/postgres"
-	transporthttp "github.com/Akendo/assigment1/appointment/internal/transport/http"
+	transportgrpc "github.com/Akendo/assigment1/appointment/internal/transport/grpc"
 	"github.com/Akendo/assigment1/appointment/internal/usecase"
-	"github.com/gin-gonic/gin"
+	appointmentpb "github.com/Akendo/assigment1/appointment/proto"
+	doctorpb "github.com/Akendo/assigment1/doctor/proto"
 	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func Run() error {
@@ -31,14 +35,32 @@ func Run() error {
 	}
 
 	repo := postgres.NewAppointmentRepository(db)
-	doctorGateway := gateway.NewDoctorRESTGateway(getEnv("DOCTOR_SERVICE_URL", "http://localhost:8081"))
+
+	conn, err := grpc.NewClient(
+		getEnv("DOCTOR_SERVICE_ADDR", "localhost:50051"),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	doctorServiceClient := doctorpb.NewDoctorServiceClient(conn)
+	doctorGateway := client.NewDoctorGRPCClient(doctorServiceClient)
+
 	service := usecase.NewAppointmentService(repo, doctorGateway)
-	handler := transporthttp.NewHandler(service)
+	handler := transportgrpc.NewHandler(service)
 
-	router := gin.Default()
-	handler.RegisterRoutes(router)
+	lis, err := net.Listen("tcp", ":50052")
+	if err != nil {
+		return err
+	}
 
-	return router.Run(":8082")
+	grpcServer := grpc.NewServer()
+	appointmentpb.RegisterAppointmentServiceServer(grpcServer, handler)
+
+	return grpcServer.Serve(lis)
+
 }
 
 func openDB(host, port, name, user, password string) (*sql.DB, error) {

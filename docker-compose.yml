@@ -22,7 +22,7 @@ services:
       dockerfile: doctor/Dockerfile
     container_name: doctor-service
     ports:
-      - "8081:8081"
+      - "50051:50051"
     environment:
       DB_HOST: doctor-db
       DB_PORT: 5432
@@ -56,17 +56,19 @@ services:
       dockerfile: appointment/Dockerfile
     container_name: appointment-service
     ports:
-      - "8082:8082"
+      - "50052:50052"
     environment:
       DB_HOST: appointment-db
       DB_PORT: 5432
       DB_NAME: appointment_db
       DB_USER: appointment_user
       DB_PASSWORD: appointment_pass
-      DOCTOR_SERVICE_URL: http://doctor:8081
+      DOCTOR_SERVICE_ADDR: doctor:50051
     depends_on:
       appointment-db:
         condition: service_healthy
+      doctor:
+        condition: service_started
 
 volumes:
   doctor_pgdata:
