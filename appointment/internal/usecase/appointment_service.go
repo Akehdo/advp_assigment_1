@@ -1,14 +1,11 @@
 package usecase
 
 import (
-	"errors"
+	apperrors "github.com/Akendo/assigment1/appointment/internal/errors"
 
 	"github.com/Akendo/assigment1/appointment/internal/model"
 	"github.com/Akendo/assigment1/appointment/internal/repository"
 )
-
-var ErrDoctorServiceUnavailable = errors.New("doctor service is unavailable")
-var ErrDoctorNotFound = errors.New("doctor not found")
 
 type DoctorGateway interface {
 	Exists(id string) (bool, error)
@@ -28,7 +25,7 @@ func NewAppointmentService(repo repository.AppointmentRepository, doctorGateway 
 
 func (s *AppointmentService) CreateAppointment(title, description, doctorID string) (*model.Appointment, error) {
 	if s.doctorGateway == nil {
-		return nil, ErrDoctorServiceUnavailable
+		return nil, apperrors.ErrDoctorServiceUnavailable
 	}
 
 	exists, err := s.doctorGateway.Exists(doctorID)
@@ -36,7 +33,7 @@ func (s *AppointmentService) CreateAppointment(title, description, doctorID stri
 		return nil, err
 	}
 	if !exists {
-		return nil, ErrDoctorNotFound
+		return nil, apperrors.ErrDoctorNotFound
 	}
 
 	appointment, err := model.NewAppointment(title, description, doctorID)
