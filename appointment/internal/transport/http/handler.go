@@ -5,10 +5,10 @@ import (
 	"fmt"
 	nethttp "net/http"
 
+	apperrors "github.com/Akendo/assigment1/appointment/internal/errors"
 	"github.com/Akendo/assigment1/appointment/internal/model"
 	"github.com/Akendo/assigment1/appointment/internal/repository"
 	"github.com/Akendo/assigment1/appointment/internal/transport/http/dto"
-	"github.com/Akendo/assigment1/appointment/internal/usecase"
 	"github.com/gin-gonic/gin"
 )
 
@@ -49,9 +49,9 @@ func (h *Handler) createAppointment(c *gin.Context) {
 	appointment, err := h.service.CreateAppointment(req.Title, req.Description, req.DoctorID)
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrDoctorNotFound):
+		case errors.Is(err, apperrors.ErrDoctorNotFound):
 			c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, usecase.ErrDoctorServiceUnavailable):
+		case errors.Is(err, apperrors.ErrDoctorServiceUnavailable):
 			c.JSON(nethttp.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		default:
 			c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})

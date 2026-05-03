@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Akendo/assigment1/appointment/internal/usecase"
+	apperrors "github.com/Akendo/assigment1/appointment/internal/errors"
 	doctorpb "github.com/Akendo/assigment1/doctor/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,16 +30,16 @@ func (c *DoctorGRPCClient) Exists(id string) (bool, error) {
 	if err != nil {
 		st, ok := status.FromError(err)
 		if !ok {
-			return false, usecase.ErrDoctorServiceUnavailable
+			return false, apperrors.ErrDoctorServiceUnavailable
 		}
 
 		switch st.Code() {
 		case codes.NotFound:
 			return false, nil
 		case codes.Unavailable, codes.DeadlineExceeded:
-			return false, usecase.ErrDoctorServiceUnavailable
+			return false, apperrors.ErrDoctorServiceUnavailable
 		default:
-			return false, usecase.ErrDoctorServiceUnavailable
+			return false, apperrors.ErrDoctorServiceUnavailable
 		}
 	}
 
