@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/Akendo/assigment1/appointment/internal/errors"
 	"github.com/Akendo/assigment1/appointment/internal/model"
 	"github.com/Akendo/assigment1/appointment/internal/repository"
-	"github.com/Akendo/assigment1/appointment/internal/usecase"
 	appointmentpb "github.com/Akendo/assigment1/appointment/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,9 +42,9 @@ func (h *Handler) CreateAppointment(ctx context.Context, req *appointmentpb.Crea
 	appointment, err := h.service.CreateAppointment(req.GetTitle(), req.GetDescription(), req.GetDoctorId())
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrDoctorNotFound):
+		case errors.Is(err, apperrors.ErrDoctorNotFound):
 			return nil, status.Error(codes.FailedPrecondition, "doctor does not exist")
-		case errors.Is(err, usecase.ErrDoctorServiceUnavailable):
+		case errors.Is(err, apperrors.ErrDoctorServiceUnavailable):
 			return nil, status.Error(codes.Unavailable, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, err.Error())
