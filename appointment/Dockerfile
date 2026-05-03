@@ -15,6 +15,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /root/
 COPY --from=builder /app/appointment-service .
+COPY --from=builder /app/appointment/migrations ./migrations
 
 EXPOSE 50052
 

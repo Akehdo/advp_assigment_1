@@ -14,6 +14,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /root/
 COPY --from=builder /app/doctor-service .
+COPY --from=builder /app/doctor/migrations ./migrations
 
 EXPOSE 50051
 
