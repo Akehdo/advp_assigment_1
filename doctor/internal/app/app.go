@@ -4,15 +4,18 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 
+	"github.com/Akendo/assigment1/doctor/internal/event"
 	"github.com/Akendo/assigment1/doctor/internal/repository/postgres"
 	transportgrpc "github.com/Akendo/assigment1/doctor/internal/transport/grpc"
 	"github.com/Akendo/assigment1/doctor/internal/usecase"
 	doctorpb "github.com/Akendo/assigment1/doctor/proto"
+	"github.com/Akendo/assigment1/pkg/messaging"
 	"github.com/golang-migrate/migrate/v4"
 	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -32,7 +35,8 @@ func Run() error {
 	}
 
 	repo := postgres.NewDoctorRepository(db)
-	service := usecase.NewDoctorService(repo)
+	publisher := newDoctorPublisher()
+	service := usecase.NewDoctorService(repo, publisher)
 	handler := transportgrpc.NewHandler(service)
 
 	lis, err := net.Listen("tcp", ":50051")
@@ -45,6 +49,17 @@ func Run() error {
 
 	return grpcServer.Serve(lis)
 
+}
+
+func newDoctorPublisher() event.Publisher {
+	natsURL := getEnv("NATS_URL", "nats://localhost:4222")
+	conn, err := messaging.ConnectNATS(natsURL, "doctor-service", log.Default())
+	if err != nil {
+		log.Printf("warning: doctor service could not connect to NATS at startup: %v", err)
+		return event.NewNoopPublisher()
+	}
+
+	return event.NewNATSPublisher(conn, log.Default())
 }
 
 func openDB() (*sql.DB, error) {

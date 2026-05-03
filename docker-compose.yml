@@ -1,17 +1,25 @@
 services:
+  nats:
+    image: nats:2.11-alpine
+    container_name: ap2-nats
+    command: ["--http_port", "${NATS_MONITORING_PORT}"]
+    ports:
+      - "${NATS_PORT}:4222"
+      - "${NATS_MONITORING_PORT}:8222"
+
   doctor-db:
     image: postgres:16
     container_name: doctor-db
     environment:
-      POSTGRES_DB: doctor_db
-      POSTGRES_USER: doctor_user
-      POSTGRES_PASSWORD: doctor_pass
+      POSTGRES_DB: ${DOCTOR_DB_NAME}
+      POSTGRES_USER: ${DOCTOR_DB_USER}
+      POSTGRES_PASSWORD: ${DOCTOR_DB_PASSWORD}
     ports:
-      - "5433:5432"
+      - "${DOCTOR_DB_PORT}:5432"
     volumes:
       - doctor_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U doctor_user -d doctor_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DOCTOR_DB_USER} -d ${DOCTOR_DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,13 +30,10 @@ services:
       dockerfile: doctor/Dockerfile
     container_name: doctor-service
     ports:
-      - "50051:50051"
+      - "${DOCTOR_GRPC_PORT}:50051"
     environment:
-      DB_HOST: doctor-db
-      DB_PORT: 5432
-      DB_NAME: doctor_db
-      DB_USER: doctor_user
-      DB_PASSWORD: doctor_pass
+      DATABASE_URL: postgres://${DOCTOR_DB_USER}:${DOCTOR_DB_PASSWORD}@doctor-db:5432/${DOCTOR_DB_NAME}?sslmode=disable
+      NATS_URL: ${NATS_URL}
     depends_on:
       doctor-db:
         condition: service_healthy
@@ -37,15 +42,15 @@ services:
     image: postgres:16
     container_name: appointment-db
     environment:
-      POSTGRES_DB: appointment_db
-      POSTGRES_USER: appointment_user
-      POSTGRES_PASSWORD: appointment_pass
+      POSTGRES_DB: ${APPOINTMENT_DB_NAME}
+      POSTGRES_USER: ${APPOINTMENT_DB_USER}
+      POSTGRES_PASSWORD: ${APPOINTMENT_DB_PASSWORD}
     ports:
-      - "5434:5432"
+      - "${APPOINTMENT_DB_PORT}:5432"
     volumes:
       - appointment_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U appointment_user -d appointment_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${APPOINTMENT_DB_USER} -d ${APPOINTMENT_DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -56,18 +61,26 @@ services:
       dockerfile: appointment/Dockerfile
     container_name: appointment-service
     ports:
-      - "50052:50052"
+      - "${APPOINTMENT_GRPC_PORT}:50052"
     environment:
-      DB_HOST: appointment-db
-      DB_PORT: 5432
-      DB_NAME: appointment_db
-      DB_USER: appointment_user
-      DB_PASSWORD: appointment_pass
-      DOCTOR_SERVICE_ADDR: doctor:50051
+      DATABASE_URL: postgres://${APPOINTMENT_DB_USER}:${APPOINTMENT_DB_PASSWORD}@appointment-db:5432/${APPOINTMENT_DB_NAME}?sslmode=disable
+      DOCTOR_SERVICE_ADDR: ${DOCTOR_SERVICE_ADDR}
+      NATS_URL: ${NATS_URL}
     depends_on:
       appointment-db:
         condition: service_healthy
       doctor:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    environment:
+      NATS_URL: ${NATS_URL}
+    depends_on:
+      nats:
         condition: service_started
 
 volumes:

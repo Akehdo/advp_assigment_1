@@ -2,6 +2,7 @@ package usecase
 
 import (
 	apperrors "github.com/Akendo/assigment1/appointment/internal/errors"
+	"github.com/Akendo/assigment1/appointment/internal/event"
 
 	"github.com/Akendo/assigment1/appointment/internal/model"
 	"github.com/Akendo/assigment1/appointment/internal/repository"
@@ -14,12 +15,18 @@ type DoctorGateway interface {
 type AppointmentService struct {
 	repo          repository.AppointmentRepository
 	doctorGateway DoctorGateway
+	publisher     event.Publisher
 }
 
-func NewAppointmentService(repo repository.AppointmentRepository, doctorGateway DoctorGateway) *AppointmentService {
+func NewAppointmentService(repo repository.AppointmentRepository, doctorGateway DoctorGateway, publisher event.Publisher) *AppointmentService {
+	if publisher == nil {
+		publisher = event.NewNoopPublisher()
+	}
+
 	return &AppointmentService{
 		repo:          repo,
 		doctorGateway: doctorGateway,
+		publisher:     publisher,
 	}
 }
 
@@ -45,6 +52,8 @@ func (s *AppointmentService) CreateAppointment(title, description, doctorID stri
 		return nil, err
 	}
 
+	s.publisher.PublishAppointmentCreated(appointment)
+
 	return appointment, nil
 }
 
@@ -62,6 +71,8 @@ func (s *AppointmentService) UpdateStatus(id string, status model.Status) (*mode
 		return nil, err
 	}
 
+	oldStatus := appointment.Status
+
 	if err := appointment.UpdateStatus(status); err != nil {
 		return nil, err
 	}
@@ -69,6 +80,8 @@ func (s *AppointmentService) UpdateStatus(id string, status model.Status) (*mode
 	if err := s.repo.UpdateStatus(id, appointment.Status); err != nil {
 		return nil, err
 	}
+
+	s.publisher.PublishAppointmentStatusUpdated(appointment.ID, oldStatus, appointment.Status)
 
 	return appointment, nil
 }

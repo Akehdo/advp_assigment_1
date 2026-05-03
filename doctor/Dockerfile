@@ -5,6 +5,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY pkg ./pkg
 COPY utils ./utils
 COPY doctor ./doctor
 

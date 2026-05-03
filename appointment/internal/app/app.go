@@ -4,17 +4,20 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 
 	"github.com/Akendo/assigment1/appointment/internal/client"
+	"github.com/Akendo/assigment1/appointment/internal/event"
 	"github.com/Akendo/assigment1/appointment/internal/repository/postgres"
 	transportgrpc "github.com/Akendo/assigment1/appointment/internal/transport/grpc"
 	"github.com/Akendo/assigment1/appointment/internal/usecase"
 	appointmentpb "github.com/Akendo/assigment1/appointment/proto"
 	doctorpb "github.com/Akendo/assigment1/doctor/proto"
+	"github.com/Akendo/assigment1/pkg/messaging"
 	"github.com/golang-migrate/migrate/v4"
 	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -48,7 +51,8 @@ func Run() error {
 	doctorServiceClient := doctorpb.NewDoctorServiceClient(conn)
 	doctorGateway := client.NewDoctorGRPCClient(doctorServiceClient)
 
-	service := usecase.NewAppointmentService(repo, doctorGateway)
+	publisher := newAppointmentPublisher()
+	service := usecase.NewAppointmentService(repo, doctorGateway, publisher)
 	handler := transportgrpc.NewHandler(service)
 
 	lis, err := net.Listen("tcp", ":50052")
@@ -61,6 +65,17 @@ func Run() error {
 
 	return grpcServer.Serve(lis)
 
+}
+
+func newAppointmentPublisher() event.Publisher {
+	natsURL := getEnv("NATS_URL", "nats://localhost:4222")
+	conn, err := messaging.ConnectNATS(natsURL, "appointment-service", log.Default())
+	if err != nil {
+		log.Printf("warning: appointment service could not connect to NATS at startup: %v", err)
+		return event.NewNoopPublisher()
+	}
+
+	return event.NewNATSPublisher(conn, log.Default())
 }
 
 func openDB() (*sql.DB, error) {

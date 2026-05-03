@@ -1,16 +1,25 @@
 package usecase
 
 import (
+	"github.com/Akendo/assigment1/doctor/internal/event"
 	"github.com/Akendo/assigment1/doctor/internal/model"
 	"github.com/Akendo/assigment1/doctor/internal/repository"
 )
 
 type DoctorService struct {
-	repo repository.DoctorRepository
+	repo      repository.DoctorRepository
+	publisher event.Publisher
 }
 
-func NewDoctorService(repo repository.DoctorRepository) *DoctorService {
-	return &DoctorService{repo: repo}
+func NewDoctorService(repo repository.DoctorRepository, publisher event.Publisher) *DoctorService {
+	if publisher == nil {
+		publisher = event.NewNoopPublisher()
+	}
+
+	return &DoctorService{
+		repo:      repo,
+		publisher: publisher,
+	}
 }
 
 func (s *DoctorService) CreateDoctor(fullName, specialization, email string) (*model.Doctor, error) {
@@ -22,6 +31,8 @@ func (s *DoctorService) CreateDoctor(fullName, specialization, email string) (*m
 	if err := s.repo.Create(doctor); err != nil {
 		return nil, err
 	}
+
+	s.publisher.PublishDoctorCreated(doctor)
 
 	return doctor, nil
 }
