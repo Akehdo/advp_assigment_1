@@ -1,4 +1,10 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: ap2-redis
+    ports:
+      - "${REDIS_PORT}:6379"
+
   nats:
     image: nats:2.11-alpine
     container_name: ap2-nats
@@ -34,9 +40,13 @@ services:
     environment:
       DATABASE_URL: postgres://${DOCTOR_DB_USER}:${DOCTOR_DB_PASSWORD}@doctor-db:5432/${DOCTOR_DB_NAME}?sslmode=disable
       NATS_URL: ${NATS_URL}
+      REDIS_URL: ${REDIS_URL}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
     depends_on:
       doctor-db:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   appointment-db:
     image: postgres:16
@@ -66,10 +76,14 @@ services:
       DATABASE_URL: postgres://${APPOINTMENT_DB_USER}:${APPOINTMENT_DB_PASSWORD}@appointment-db:5432/${APPOINTMENT_DB_NAME}?sslmode=disable
       DOCTOR_SERVICE_ADDR: ${DOCTOR_SERVICE_ADDR}
       NATS_URL: ${NATS_URL}
+      REDIS_URL: ${REDIS_URL}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
     depends_on:
       appointment-db:
         condition: service_healthy
       doctor:
+        condition: service_started
+      redis:
         condition: service_started
 
   notification-service:
