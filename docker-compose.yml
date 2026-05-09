@@ -5,6 +5,17 @@ services:
     ports:
       - "${REDIS_PORT}:6379"
 
+  mock-gateway:
+    build:
+      context: .
+      dockerfile: mock-gateway/Dockerfile
+    container_name: mock-gateway
+    ports:
+      - "${MOCK_GATEWAY_PORT}:8080"
+    environment:
+      MOCK_GATEWAY_PORT: 8080
+      MOCK_GATEWAY_FAILURE_PERCENT: ${MOCK_GATEWAY_FAILURE_PERCENT}
+
   nats:
     image: nats:2.11-alpine
     container_name: ap2-nats
@@ -95,8 +106,11 @@ services:
     container_name: notification-service
     environment:
       NATS_URL: ${NATS_URL}
+      MOCK_GATEWAY_URL: ${MOCK_GATEWAY_URL}
     depends_on:
       nats:
+        condition: service_started
+      mock-gateway:
         condition: service_started
 
 volumes:
