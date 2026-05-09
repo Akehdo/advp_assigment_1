@@ -9,7 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
+	"github.com/Akendo/assigment1/appointment/internal/cache"
 	"github.com/Akendo/assigment1/appointment/internal/client"
 	"github.com/Akendo/assigment1/appointment/internal/event"
 	"github.com/Akendo/assigment1/appointment/internal/repository/postgres"
@@ -38,6 +41,11 @@ func Run() error {
 	}
 
 	repo := postgres.NewAppointmentRepository(db)
+	cacheRepo, cacheTTL, err := newAppointmentCache()
+	if err != nil {
+		return err
+	}
+	defer cacheRepo.Close()
 
 	conn, err := grpc.NewClient(
 		getEnv("DOCTOR_SERVICE_ADDR", "localhost:50051"),
@@ -52,7 +60,8 @@ func Run() error {
 	doctorGateway := client.NewDoctorGRPCClient(doctorServiceClient)
 
 	publisher := newAppointmentPublisher()
-	service := usecase.NewAppointmentService(repo, doctorGateway, publisher)
+	coreService := usecase.NewAppointmentService(repo, doctorGateway, publisher)
+	service := cache.NewAppointmentService(coreService, cacheRepo, cacheTTL, log.Default())
 	handler := transportgrpc.NewHandler(service)
 
 	lis, err := net.Listen("tcp", ":50052")
@@ -76,6 +85,15 @@ func newAppointmentPublisher() event.Publisher {
 	}
 
 	return event.NewNATSPublisher(conn, log.Default())
+}
+
+func newAppointmentCache() (*cache.RedisCacheRepository, time.Duration, error) {
+	cacheRepo, err := cache.NewRedisCacheRepository(getEnv("REDIS_URL", "redis://localhost:6379/0"))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create appointment redis cache: %w", err)
+	}
+
+	return cacheRepo, getEnvAsDuration("CACHE_TTL_SECONDS", 60*time.Second), nil
 }
 
 func openDB() (*sql.DB, error) {
@@ -184,4 +202,18 @@ func getEnv(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return fallback
+	}
+
+	return time.Duration(seconds) * time.Second
 }

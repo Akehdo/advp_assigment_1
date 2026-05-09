@@ -9,7 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
+	"github.com/Akendo/assigment1/doctor/internal/cache"
 	"github.com/Akendo/assigment1/doctor/internal/event"
 	"github.com/Akendo/assigment1/doctor/internal/repository/postgres"
 	transportgrpc "github.com/Akendo/assigment1/doctor/internal/transport/grpc"
@@ -35,8 +38,15 @@ func Run() error {
 	}
 
 	repo := postgres.NewDoctorRepository(db)
+	cacheRepo, cacheTTL, err := newDoctorCache()
+	if err != nil {
+		return err
+	}
+	defer cacheRepo.Close()
+
 	publisher := newDoctorPublisher()
-	service := usecase.NewDoctorService(repo, publisher)
+	coreService := usecase.NewDoctorService(repo, publisher)
+	service := cache.NewDoctorService(coreService, cacheRepo, cacheTTL, log.Default())
 	handler := transportgrpc.NewHandler(service)
 
 	lis, err := net.Listen("tcp", ":50051")
@@ -60,6 +70,15 @@ func newDoctorPublisher() event.Publisher {
 	}
 
 	return event.NewNATSPublisher(conn, log.Default())
+}
+
+func newDoctorCache() (*cache.RedisCacheRepository, time.Duration, error) {
+	cacheRepo, err := cache.NewRedisCacheRepository(getEnv("REDIS_URL", "redis://localhost:6379/0"))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create doctor redis cache: %w", err)
+	}
+
+	return cacheRepo, getEnvAsDuration("CACHE_TTL_SECONDS", 60*time.Second), nil
 }
 
 func openDB() (*sql.DB, error) {
@@ -168,4 +187,18 @@ func getEnv(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return fallback
+	}
+
+	return time.Duration(seconds) * time.Second
 }
