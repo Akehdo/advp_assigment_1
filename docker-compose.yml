@@ -42,6 +42,7 @@ services:
       NATS_URL: ${NATS_URL}
       REDIS_URL: ${REDIS_URL}
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM}
     depends_on:
       doctor-db:
         condition: service_healthy
@@ -78,6 +79,7 @@ services:
       NATS_URL: ${NATS_URL}
       REDIS_URL: ${REDIS_URL}
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM}
     depends_on:
       appointment-db:
         condition: service_healthy
