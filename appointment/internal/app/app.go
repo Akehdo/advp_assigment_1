@@ -15,6 +15,7 @@ import (
 	"github.com/Akendo/assigment1/appointment/internal/cache"
 	"github.com/Akendo/assigment1/appointment/internal/client"
 	"github.com/Akendo/assigment1/appointment/internal/event"
+	"github.com/Akendo/assigment1/appointment/internal/middleware"
 	"github.com/Akendo/assigment1/appointment/internal/repository/postgres"
 	transportgrpc "github.com/Akendo/assigment1/appointment/internal/transport/grpc"
 	"github.com/Akendo/assigment1/appointment/internal/usecase"
@@ -46,6 +47,11 @@ func Run() error {
 		return err
 	}
 	defer cacheRepo.Close()
+	rateLimiter, err := newAppointmentRateLimiter()
+	if err != nil {
+		return err
+	}
+	defer rateLimiter.Close()
 
 	conn, err := grpc.NewClient(
 		getEnv("DOCTOR_SERVICE_ADDR", "localhost:50051"),
@@ -69,7 +75,9 @@ func Run() error {
 		return err
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.UnaryRateLimitInterceptor(rateLimiter, log.Default())),
+	)
 	appointmentpb.RegisterAppointmentServiceServer(grpcServer, handler)
 
 	return grpcServer.Serve(lis)
@@ -94,6 +102,20 @@ func newAppointmentCache() (*cache.RedisCacheRepository, time.Duration, error) {
 	}
 
 	return cacheRepo, getEnvAsDuration("CACHE_TTL_SECONDS", 60*time.Second), nil
+}
+
+func newAppointmentRateLimiter() (*middleware.RedisRateLimiter, error) {
+	limiter, err := middleware.NewRedisRateLimiter(
+		getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		getEnvAsInt("RATE_LIMIT_RPM", 100),
+		time.Minute,
+		"appointment:ratelimit",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create appointment rate limiter: %w", err)
+	}
+
+	return limiter, nil
 }
 
 func openDB() (*sql.DB, error) {
@@ -216,4 +238,18 @@ func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	}
 
 	return time.Duration(seconds) * time.Second
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/Akendo/assigment1/doctor/internal/cache"
 	"github.com/Akendo/assigment1/doctor/internal/event"
+	"github.com/Akendo/assigment1/doctor/internal/middleware"
 	"github.com/Akendo/assigment1/doctor/internal/repository/postgres"
 	transportgrpc "github.com/Akendo/assigment1/doctor/internal/transport/grpc"
 	"github.com/Akendo/assigment1/doctor/internal/usecase"
@@ -43,6 +44,11 @@ func Run() error {
 		return err
 	}
 	defer cacheRepo.Close()
+	rateLimiter, err := newDoctorRateLimiter()
+	if err != nil {
+		return err
+	}
+	defer rateLimiter.Close()
 
 	publisher := newDoctorPublisher()
 	coreService := usecase.NewDoctorService(repo, publisher)
@@ -54,7 +60,9 @@ func Run() error {
 		return err
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.UnaryRateLimitInterceptor(rateLimiter, log.Default())),
+	)
 	doctorpb.RegisterDoctorServiceServer(grpcServer, handler)
 
 	return grpcServer.Serve(lis)
@@ -79,6 +87,20 @@ func newDoctorCache() (*cache.RedisCacheRepository, time.Duration, error) {
 	}
 
 	return cacheRepo, getEnvAsDuration("CACHE_TTL_SECONDS", 60*time.Second), nil
+}
+
+func newDoctorRateLimiter() (*middleware.RedisRateLimiter, error) {
+	limiter, err := middleware.NewRedisRateLimiter(
+		getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		getEnvAsInt("RATE_LIMIT_RPM", 100),
+		time.Minute,
+		"doctor:ratelimit",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create doctor rate limiter: %w", err)
+	}
+
+	return limiter, nil
 }
 
 func openDB() (*sql.DB, error) {
@@ -201,4 +223,18 @@ func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	}
 
 	return time.Duration(seconds) * time.Second
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
 }
